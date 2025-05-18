@@ -60,5 +60,5 @@ def main():
                 st.markdown(response)
                 st.session_state.messages.append({"role": "assistant", "content": response})
 
-if _name_ == "_main_":
+if __name__ == "__main__":
     main()
