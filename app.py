@@ -5,21 +5,31 @@ from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
 
-# Download required NLTK data
-try:
-    nltk.data.find('tokenizers/punkt')
-    nltk.data.find('corpora/stopwords')
-    nltk.data.find('corpora/wordnet')
-except LookupError:
-    nltk.download('punkt')
-    nltk.download('stopwords')
-    nltk.download('wordnet')
+# Download required NLTK data with error handling
+def download_nltk_data():
+    try:
+        nltk.data.find('tokenizers/punkt')
+        nltk.data.find('corpora/stopwords')
+        nltk.data.find('corpora/wordnet')
+    except LookupError:
+        try:
+            nltk.download('punkt', quiet=True)
+            nltk.download('stopwords', quiet=True)
+            nltk.download('wordnet', quiet=True)
+        except Exception as e:
+            st.error(f"Failed to download NLTK data: {e}. Please check your internet connection and try again.")
+            return False
+    return True
 
 # Initialize NLTK tools
-lemmatizer = WordNetLemmatizer()
-stop_words = set(stopwords.words('english'))
+if download_nltk_data():
+    lemmatizer = WordNetLemmatizer()
+    stop_words = set(stopwords.words('english'))
+else:
+    lemmatizer = None
+    stop_words = set()
 
-# Predefined intents and responses for tyre sales
+# Predefined intents and responses for tyre sales import numpy as np
 INTENTS = {
     "greeting": {
         "patterns": [r"hi|hello|hey|greetings"],
@@ -30,7 +40,7 @@ INTENTS = {
         "responses": ["We offer a variety of tyres including All-Season, Winter, Performance, and Off-Road tyres. Could you specify your vehicle type or driving needs?"]
     },
     "pricing": {
-        "patterns": [r"price|cost|how much|pricing"],
+        "patterns": [r"price|cost|how much|pricing|prices"],
         "responses": ["Tyre prices vary based on size and type. For example, All-Season tyres start at $50 each. Please provide the tyre size or vehicle model for an accurate quote."]
     },
     "availability": {
@@ -53,6 +63,8 @@ INTENTS = {
 
 # Function to preprocess user input
 def preprocess_text(text):
+    if not lemmatizer:
+        return [], text
     text = text.lower().strip()
     tokens = word_tokenize(text)
     tokens = [lemmatizer.lemmatize(token) for token in tokens if token not in stop_words and token.isalnum()]
@@ -77,8 +89,8 @@ def main():
     if "messages" not in st.session_state:
         st.session_state.messages = [{"role": "assistant", "content": "Welcome to TyreWorld! How can I help you today?"}]
 
-    # Display chat history
-    for message in st.session_state.messages:
+    # Display chat history (limit to last 10 messages to prevent memory issues)
+    for message in st.session_state.messages[-10:]:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
@@ -86,6 +98,13 @@ def main():
     user_input = st.chat_input("Type your question here...")
 
     if user_input:
+        user_input = user_input.strip()
+        if not user_input:
+            st.session_state.messages.append({"role": "assistant", "content": "Please enter a valid question or command."})
+            with st.chat_message("assistant"):
+                st.markdown("Please enter a valid question or command.")
+            return
+
         # Add user message to chat history
         st.session_state.messages.append({"role": "user", "content": user_input})
         with st.chat_message("user"):
