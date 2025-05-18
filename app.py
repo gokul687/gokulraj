@@ -1,101 +1,62 @@
 import streamlit as st
-import nltk
-import re
-from nltk.tokenize import word_tokenize
-from nltk.corpus import stopwords
-from nltk.stem import WordNetLemmatizer
+import json
+import random
+import pickle
 
-# Download required NLTK data
-try:
-    nltk.data.find('tokenizers/punkt')
-    nltk.data.find('corpora/stopwords')
-    nltk.data.find('corpora/wordnet')
-except LookupError:
-    nltk.download('punkt')
-    nltk.download('stopwords')
-    nltk.download('wordnet')
+# Load intents
+with open("intents.json") as file:
+    data = json.load(file)
 
-# Initialize NLTK tools
-lemmatizer = WordNetLemmatizer()
-stop_words = set(stopwords.words('english'))
+# Load vectorizer and models
+with open("vectorizer.pkl", "rb") as f:
+    vectorizer = pickle.load(f)
 
-# Predefined intents and responses for tyre sales
-INTENTS = {
-    "greeting": {
-        "patterns": [r"hi|hello|hey|greetings"],
-        "responses": ["Hello! Welcome to TyreWorld. How can I assist you with your tyre needs today?"]
-    },
-    "tyre_types": {
-        "patterns": [r"tyre types|types of tyres|what tyres do you have|tyre kinds"],
-        "responses": ["We offer a variety of tyres including All-Season, Winter, Performance, and Off-Road tyres. Could you specify your vehicle type or driving needs?"]
-    },
-    "pricing": {
-        "patterns": [r"price|cost|how much|pricing"],
-        "responses": ["Tyre prices vary based on size and type. For example, All-Season tyres start at $50 each. Please provide the tyre size or vehicle model for an accurate quote."]
-    },
-    "availability": {
-        "patterns": [r"available|in stock|do you have|availability"],
-        "responses": ["Most tyre sizes are in stock! Please tell me the specific tyre size or brand you're looking for, and I'll check availability."]
-    },
-    "support": {
-        "patterns": [r"help|support|issue|problem|installation"],
-        "responses": ["We provide full support including installation guidance and warranty information. What's the specific issue or question you have?"]
-    },
-    "store_location": {
-        "patterns": [r"store|location|where are you|address"],
-        "responses": ["Our main store is at 123 Tyre Avenue, Auto City. Would you like directions or information about our online ordering options?"]
-    },
-    "goodbye": {
-        "patterns": [r"bye|goodbye|thank you|thanks"],
-        "responses": ["Thank you for choosing TyreWorld! Feel free to reach out anytime. Goodbye!"]
-    }
+with open("model_logreg.pkl", "rb") as f:
+    model_logreg = pickle.load(f)
+with open("model_rf.pkl", "rb") as f:
+    model_rf = pickle.load(f)
+with open("model_svm.pkl", "rb") as f:
+    model_svm = pickle.load(f)
+with open("model_nb.pkl", "rb") as f:
+    model_nb = pickle.load(f)
+
+# Dictionary of models
+models = {
+    "Logistic Regression": model_logreg,
+    "Random Forest": model_rf,
+    "SVM": model_svm,
+    "Naive Bayes": model_nb
 }
 
-# Function to preprocess user input
-def preprocess_text(text):
-    text = text.lower().strip()
-    tokens = word_tokenize(text)
-    tokens = [lemmatizer.lemmatize(token) for token in tokens if token not in stop_words and token.isalnum()]
-    return tokens, text
+# Get a chatbot response from a model
+def get_response(user_input, model):
+    X = vectorizer.transform([user_input])
+    predicted_tag = model.predict(X)[0]
 
-# Function to detect intent
-def detect_intent(user_input):
-    tokens, raw_text = preprocess_text(user_input)
-    for intent, data in INTENTS.items():
-        for pattern in data["patterns"]:
-            if re.search(pattern, raw_text, re.IGNORECASE):
-                return intent, data["responses"][0]
-    return None, "I'm sorry, I didn't understand that. Could you please clarify or ask about tyre types, pricing, or support?"
+    for intent in data["intents"]:
+        if intent["tag"] == predicted_tag:
+            return random.choice(intent["responses"])
+    return "Sorry, I don't understand that."
 
-# Streamlit app
-def main():
-    st.set_page_config(page_title="TyreWorld Customer Service Chatbot", page_icon="🚗")
-    st.title("TyreWorld Customer Service Chatbot")
-    st.markdown("Ask about tyre types, pricing, availability, or get support for your tyre needs!")
+# Streamlit UI
+st.set_page_config(page_title="Smart Chatbot", layout="centered")
+st.title("AI Customer Support Chatbot")
+st.write("This chatbot uses four different machine learning models to understand your query and respond.")
 
-    # Initialize session state for chat history
-    if "messages" not in st.session_state:
-        st.session_state.messages = [{"role": "assistant", "content": "Welcome to TyreWorld! How can I help you today?"}]
+# User input
+user_input = st.text_input("Ask your question below:")
 
-    # Display chat history
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+# Model selection
+model_choice = st.selectbox("Choose a model to respond with:", ["All"] + list(models.keys()))
 
-    # User input
-    user_input = st.chat_input("Type your question here...")
-
-    if user_input:
-        # Add user message to chat history
-        st.session_state.messages.append({"role": "user", "content": user_input})
-        with st.chat_message("user"):
-            st.markdown(user_input)
-
-        # Get chatbot response
-        intent, response = detect_intent(user_input)
-        st.session_state.messages.append({"role": "assistant", "content": response})
-        with st.chat_message("assistant"):
-            st.markdown(response)
-
-if _name_ == "_main_":
-    main()
+# Display response(s)
+if user_input:
+    st.markdown("### Response(s):")
+    if model_choice == "All":
+        for name, model in models.items():
+            response = get_response(user_input, model)
+            st.text_area(f"{name} says:", response, height=80)
+    else:
+        selected_model = models[model_choice]
+        response = get_response(user_input, selected_model)
+        st.text_area("Chatbot says:", response, height=100)
